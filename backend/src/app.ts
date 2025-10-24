@@ -1,20 +1,20 @@
 import express from 'express';
-import userRoutes from './routes/users';
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+import authRoutes from './routes/authRoutes';
 
+dotenv.config();
 const app = express();
-const PORT = 3000;
-// Middleware для парсинга JSON
+
 app.use(express.json());
-app.use('/users', userRoutes);
 
-// Тестовый роут
-app.get('/ping', (req, res) => {
-    res.json({ message: 'pongping' });
-});
+app.use('/api/auth', authRoutes);
 
-app.get('/users', (req, res) => {
-    console.log(req.url, res)
-    res.json({})
-})
+mongoose
+  .connect(process.env.MONGO_URI!)
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch((err) => console.error(err));
 
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+app.listen(process.env.PORT || 5000, () =>
+  console.log(`🚀 Server running on port ${process.env.PORT || 5000}`)
+);
