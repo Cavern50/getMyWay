@@ -6,5 +6,5 @@ defineProps<{ msg: string }>()
 const count = ref(0)  
 </script>
 <template>
-    <RegisterForm msg="s"/>
+    <RegisterForm msg="s" />
 </template>

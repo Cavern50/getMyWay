@@ -1,2 +1,6 @@
 @import "tailwindcss";
 @plugin "daisyui";
+
+@layer base {
+	html { @apply font-mono; }
+}

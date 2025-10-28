@@ -9,9 +9,8 @@ export function useLoginMutation() {
 
   return useMutation(authApi.login, {
     onSuccess: (data) => {
-      authStore.userName = data.userName;
-      authStore.token = data.token;
-      router.push('/');
+      authStore.login(data.userName, data.token);
+      router.push('/map');
     },
   })
 }
@@ -22,9 +21,8 @@ export function useRegisterMutation() {
 
   return useMutation(authApi.register, {
     onSuccess: (data) => {
-      authStore.userName = data.userName
-      authStore.token = data.token
-      router.push('/');
+      authStore.login(data.userName, data.token);
+      router.push('/map');
     },
     onError: (err) => console.error(err)
   })
