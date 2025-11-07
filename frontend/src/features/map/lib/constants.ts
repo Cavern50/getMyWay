@@ -1,6 +1,7 @@
 import { MapsTypes } from "./types";
+import type { LngLat } from '@yandex/ymaps3-types';
 
-export const mapConstants = {
+export const MAP_CONSTANTS = {
     API_KEY: 'a5030637-33a6-4eb7-b1e9-a9153f7c0884',
     LIST_ITEMS: [
         {
@@ -19,5 +20,6 @@ export const mapConstants = {
             name: 'Готово! Можете отправлять ссылку на встречу всем участникам.',
         },
     ],
+    DEFAULT_MEET_POINT: [37.617644, 55.755819] as LngLat
 } as const;
 

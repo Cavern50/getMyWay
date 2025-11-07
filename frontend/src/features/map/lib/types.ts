@@ -5,4 +5,5 @@ export namespace MapsTypes {
         SEND_MEETING_LINK = 'SEND_MEETING_LINK',
         COMPLETE = 'COMPLETE',
     }
+    export type Coords = [number, number]
 }

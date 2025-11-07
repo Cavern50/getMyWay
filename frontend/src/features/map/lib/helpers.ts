@@ -1,3 +1,7 @@
+import { type Ref } from 'vue';
+import { meetingApi, type Meeting } from '../api/meetingApi';
+import type { MapsTypes } from './types';
+
 export const mapHelpers = {
     addUserFromInputs,
 } as const;
@@ -44,4 +48,97 @@ function addUserFromInputs({ map, meetPoint, userPoint, routes }: { map: any, me
         });
     });
     routes.push(route);
+}
+
+// Загрузка встречи по URL
+export const loadMeetingFromUrl = async ({ coords, map, meetPlacemark }: { coords: MapsTypes.Coords | null, map: Ref<any>, meetPlacemark: any }) => {
+    // Пока просто показываем точку
+    if (!map) return
+
+    const yaMaps = (window as any).ymaps
+    if (!yaMaps || coords === null) return
+
+    if (!meetPlacemark) {
+        meetPlacemark = new yaMaps.Placemark(
+            coords,
+            { iconCaption: 'Точка встречи' },
+            { preset: 'islands#redCircleIcon' }
+        )
+        map.value.geoObjects.add(meetPlacemark)
+    }
+
+}
+
+
+// Обновление маршрута пользователя
+// coords должны быть в формате Yandex Maps: [lat, lon]
+export const updateUserRoute = async ({ coords, map, userRoute }: { coords: MapsTypes.Coords | null, map: Ref<any>, userRoute: any }) => {
+    const yaMaps = (window as any).ymaps
+    if (!yaMaps || !map || coords === null) return
+
+    yaMaps.geolocation.get({ provider: 'browser', mapStateAutoApply: false }).then((geoRes: any) => {
+        // userCoords уже в формате [lat, lon] от Yandex Maps
+        const userCoords = geoRes.geoObjects.get(0).geometry.getCoordinates()
+
+        if (userRoute) {
+            try {
+                map.value.geoObjects.remove(userRoute)
+            } catch (_) { }
+        }
+
+        userRoute = new yaMaps.multiRouter.MultiRoute({
+            referencePoints: [userCoords, coords],
+            params: { routingMode: 'auto', results: 1 }
+        }, {
+            routeActiveStrokeStyle: 'solid',
+            routeActiveStrokeColor: '#002233',
+            routeStrokeStyle: 'dot',
+            routeStrokeWidth: 3,
+            routeIconCaption: 'Мой маршрут',
+            boundsAutoApply: true,
+        })
+
+        map.value.geoObjects.add(userRoute)
+    }).catch((error: Error) => { console.error(error) })
+}
+
+// Присоединение к встрече по ссылке
+export const joinMeetingByLink = async ({ link, currentMeeting, meetPoint, map }: { link: string, currentMeeting: Ref<Meeting>, meetPoint: Ref<MapsTypes.Coords>, map: Ref<any> }) => {
+    try {
+        const meeting = await meetingApi.getMeetingByLink(link)
+        currentMeeting.value = meeting
+
+        if (meeting.location?.coordinates) {
+            const [lon, lat] = meeting.location.coordinates
+            meetPoint.value = [lon, lat] as MapsTypes.Coords
+
+            const yaMaps = (window as any).ymaps;
+
+            if (yaMaps && map) {
+                // Yandex Maps использует формат [lat, lon]
+                const yandexCoords: MapsTypes.Coords = [lat, lon]
+                // if (!meetPlacemark.value) {
+                //     meetPlacemark.value = new yaMaps.Placemark(
+                //         yandexCoords,
+                //         { iconCaption: meeting.title || 'Точка встречи' },
+                //         { preset: 'islands#redCircleIcon' }
+                //     )
+                //     map.value.geoObjects.add(meetPlacemark.value)
+                // }
+                map.value.setCenter(yandexCoords, 15)
+                // updateUserRoute({coords: yandexCoords, map: map, userRoute: userRoute.value }); 
+            }
+        }
+
+        // Подключаемся к WebSocket
+        // TODO: 
+        // connect()
+        // joinMeeting(meeting.meetingLink)
+
+        // // Начинаем отслеживание позиции
+        // startLocationTracking()
+    } catch (error) {
+        console.error('Error joining meeting:', error)
+        alert('Ошибка при присоединении к встрече')
+    }
 }
