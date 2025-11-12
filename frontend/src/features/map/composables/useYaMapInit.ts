@@ -8,16 +8,12 @@ type UseYaMapInitProps = {
     meetPoint: Ref<[number, number] | null>
     map: Ref<any>
     meetStep: Ref<MapsTypes.uiStep>
-    onResultSelect: () => void;
-    onInit: () => Promise<void>;
+    onYaMapsReady: () => Promise<any>
 }
 
 export const useYaMapInit = (props: UseYaMapInitProps) => {
-    const meetPlacemark = ref<any>(null)
-
-    const { mapContainer, meetPoint, map, meetStep, onInit, onResultSelect } = props
+    const { mapContainer, meetPoint, meetStep, map } = props
     const route = useRoute()
-
     onMounted(async () => {
         const meetParam = route.query.meet as string
         if (meetParam) {
@@ -66,11 +62,9 @@ export const useYaMapInit = (props: UseYaMapInitProps) => {
                     setTimeout(() => resolve(), 100)
                 })
 
-                // Если есть точка встречи из URL, загружаем встречу
-                if (meetPoint.value) {
-                    // await onInit();
-                    // await loadMeetingFromUrl({coords: meetPoint.value, map: map, meetPlacemark: meetPlacemark.value})
-                }
+                console.log(props)
+
+                props.onYaMapsReady();
 
                 // Сохраняем выбранную точку из поиска
                 inputSearch.events.add('resultselect', (e: any) => {
@@ -78,48 +72,7 @@ export const useYaMapInit = (props: UseYaMapInitProps) => {
                     inputSearch.getResult(index).then(async (res: any) => {
                         const coords = res.geometry.getCoordinates()
                         meetPoint.value = coords as MapsTypes.Coords
-
-                        const localPlacemark = new yaMaps.Placemark(
-                            coords,
-                            { iconCaption: res.properties._data.name ?? 'Точка встречи' },
-                            { preset: 'islands#redCircleIcon' }
-                        )
-                        meetPlacemark.value = localPlacemark;
                         meetStep.value = MapsTypes.uiStep.CREATE_MEETING_LINK;
-
-                        // Дождаться, пока карта завершит все операции
-                        await new Promise<void>((resolve) => {
-                            const addPlacemark = () => {
-                                try {
-                                    if (map.value && !map.value.destroyed) {
-                                        // Удалить старую метку, если есть
-                                        if (meetPlacemark.value && map.value.geoObjects.getLength() > 0) {
-                                            try {
-                                                map.value.geoObjects.remove(meetPlacemark.value)
-                                            } catch (_) { }
-                                        }
-                                        // Добавить новую метку
-                                        map.value.geoObjects.add(localPlacemark)
-                                    }
-                                } catch (e) {
-                                    console.error('Error adding placemark:', e)
-                                }
-                                map.value.events.remove('idle', addPlacemark)
-                                resolve()
-                            }
-                            console.log(map.value.events)
-                            // Подписаться на событие idle
-                            map.value.events.once('idle', addPlacemark)
-                            // Если карта уже idle, добавить сразу
-                            setTimeout(() => {
-                                if (map.value.events.get('idle')) {
-                                    addPlacemark()
-                                }
-                            }, 50)
-                        })
-
-                        // Строим маршрут от текущей геопозиции пользователя до выбранной точки
-                        onResultSelect();
 
                         try {
                             map.value.controls.remove(inputSearch)

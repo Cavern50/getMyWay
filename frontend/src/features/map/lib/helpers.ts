@@ -51,21 +51,20 @@ function addUserFromInputs({ map, meetPoint, userPoint, routes }: { map: any, me
 }
 
 // Загрузка встречи по URL
-export const loadMeetingFromUrl = async ({ coords, map, meetPlacemark }: { coords: MapsTypes.Coords | null, map: Ref<any>, meetPlacemark: any }) => {
-    // Пока просто показываем точку
+export const loadMeetingFromUrl = ({ userCoords, meeting, map }: { userCoords: MapsTypes.Coords | null, meeting: Meeting, map: Ref<any> }) => {
     if (!map) return
 
     const yaMaps = (window as any).ymaps
-    if (!yaMaps || coords === null) return
+    if (!yaMaps || !Array.isArray(userCoords)) return
 
-    if (!meetPlacemark) {
-        meetPlacemark = new yaMaps.Placemark(
-            coords,
-            { iconCaption: 'Точка встречи' },
-            { preset: 'islands#redCircleIcon' }
-        )
-        map.value.geoObjects.add(meetPlacemark)
-    }
+    // вернёт строку или null
+
+    const meetPlacemark = new yaMaps.Placemark(
+        meeting.location.coordinates,
+        { iconCaption: meeting.title },
+        { preset: 'islands#redCircleIcon' }
+    )
+    map.value.geoObjects.add(meetPlacemark)
 
 }
 
@@ -141,4 +140,24 @@ export const joinMeetingByLink = async ({ link, currentMeeting, meetPoint, map }
         console.error('Error joining meeting:', error)
         alert('Ошибка при присоединении к встрече')
     }
+}
+
+export const addRoute = ({ coords, map }: { coords: { start: [number, number], finish: [number, number] }, map: any }) => {
+    if (!map.value) return
+    //@ts-ignore
+    const { multiRouter } = window.ymaps
+    console.log(coords)
+    const route = new multiRouter.MultiRoute(
+        {
+            referencePoints: [coords.start, coords.finish],
+            params: { routingMode: 'pedestrian', results: 1 },
+        },
+        {
+            wayPointStartVisible: false,
+            wayPointFinishVisible: false,
+        },
+    );
+
+    map.value.geoObjects.add(route)
+    return route;
 }

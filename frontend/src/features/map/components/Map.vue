@@ -1,19 +1,16 @@
 <script setup lang="ts">
-import { onMounted, ref, onUnmounted, watch, shallowRef } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, watch, shallowRef } from 'vue'
 import { MAP_CONSTANTS } from '../lib/constants'
 import { MapsTypes } from '../lib/types'
 import { Alert } from '@/shared/ui'
 import { useMeetingSocket } from '../composables/useMeetingSocket'
 import { meetingApi, type Meeting } from '../api/meetingApi'
-import { useAuthStore } from '@/features/auth/model/useAuthStore'
-import { joinMeetingByLink, loadMeetingFromUrl, updateUserRoute } from '../lib/helpers'
+import { loadMeetingFromUrl, addRoute } from '../lib/helpers'
 import { useYaMapInit } from '../composables/useYaMapInit'
+import { useGeolocationWatch } from '../composables/useGeolocationWatch'
 
+const map = shallowRef<any>(null)
 
-const authStore = useAuthStore()
-
-const map = ref<any>(null);
 const mapContainer = ref<HTMLDivElement | null>(null);
 const meetStep = ref<MapsTypes.uiStep>(MapsTypes.uiStep.FIND_MEET_POINT)
 const meetPoint = ref<MapsTypes.Coords | null>(null)
@@ -21,6 +18,7 @@ const meetingLink = ref<string>('')
 const currentMeeting = ref<Meeting | null>(null)
 const isCopiedAlertVisible = ref<boolean>(false)
 const isCreatingMeeting = ref<boolean>(false)
+const userRoute = shallowRef<any>(null);
 
 // WebSocket для отслеживания позиций
 const {
@@ -32,12 +30,6 @@ const {
     participantLocations,
     isConnected
 } = useMeetingSocket()
-
-
-
-
-
-
 
 // // Создание встречи
 async function createMeetingLink() {
@@ -89,22 +81,70 @@ function copyMeetingLink() {
     }
 }
 
+const { coords } = useGeolocationWatch({
+    enableHighAccuracy: true,
+    timeout: 1000,
+});
+
+
 useYaMapInit({
     mapContainer,
     meetPoint,
     map,
     meetStep,
-    onInit: () => new Promise((res) => 1),
-    onResultSelect: () => 2
+    onYaMapsReady: async () => {
+        const params = new URLSearchParams(window.location.search);
+
+        const meetLink = params.get('meetLink');
+        if (meetLink) {
+            const meetData = await meetingApi.getMeetingByLink(meetLink);
+            loadMeetingFromUrl({
+                userCoords: coords.value,
+                map,
+                meeting: meetData
+            });
+            addRoute({ coords: { start: coords.value, finish: meetData.location.coordinates }, map })
+        }
+
+    }
+});
+
+
+
+
+
+watch(coords, newCoords => {
+    if (userRoute.value) {
+        userRoute.value?.model.setReferencePoints([newCoords, meetPoint.value])
+    }
+});
+
+watch(meetPoint, (newMeetPoint) => {
+    // @ts-ignore
+    const yaMaps = window.ymaps as any
+
+    if (newMeetPoint) {
+        if (!userRoute.value) {
+            const route = addRoute({ coords: { start: coords.value, finish: newMeetPoint }, map });
+            userRoute.value = route;
+        }
+        var myGeoObjects = new yaMaps.GeoObjectCollection({}, {
+            preset: "islands#redCircleIcon",
+            strokeWidth: 4,
+            geodesic: true
+        });
+        // Добавление меток и полилинии в коллекцию.
+        myGeoObjects.add(new yaMaps.Placemark(newMeetPoint));
+        // Добавление коллекции на карту.
+        map.value.geoObjects.add(myGeoObjects);
+    }
 })
 
 </script>
 
 <template>
     <div class="p-4 h-screen">
-        <div ref="mapContainer" style="width: 100%; height: 50vh;">
-
-        </div>
+        <div ref="mapContainer" style="width: 100%; height: 50vh;"></div>
 
         <div class="mt-4 w-64 space-y-2">
             <div v-if="isConnected" class="mb-2">
@@ -116,7 +156,8 @@ useYaMapInit({
             <ul class="ml-6 text-m font-medium list-decimal">
                 <li v-for="item in MAP_CONSTANTS.LIST_ITEMS" :key="item.id"
                     :class="meetStep === item.step ? 'list-item' : 'list-item opacity-10'">
-                    {{ item.name }}</li>
+                    {{ item.name }}
+                </li>
             </ul>
             <div v-if="meetStep === MapsTypes.uiStep.CREATE_MEETING_LINK">
                 <button type="button" class="btn btn-primary w-full" @click="createMeetingLink"
