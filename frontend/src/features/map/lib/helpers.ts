@@ -51,13 +51,10 @@ function addUserFromInputs({ map, meetPoint, userPoint, routes }: { map: any, me
 }
 
 // Загрузка встречи по URL
-export const loadMeetingFromUrl = ({ userCoords, meeting, map }: { userCoords: MapsTypes.Coords | null, meeting: Meeting, map: Ref<any> }) => {
-    if (!map) return
-
+export const setMeetingPlacemark = ({ meeting, map }: { meeting: Meeting, map: Ref<any> }) => {
     const yaMaps = (window as any).ymaps
-    if (!yaMaps || !Array.isArray(userCoords)) return
 
-    // вернёт строку или null
+    if (!map || !yaMaps) return
 
     const meetPlacemark = new yaMaps.Placemark(
         meeting.location.coordinates,
@@ -146,7 +143,6 @@ export const addRoute = ({ coords, map }: { coords: { start: [number, number], f
     if (!map.value) return
     //@ts-ignore
     const { multiRouter } = window.ymaps
-    console.log(coords)
     const route = new multiRouter.MultiRoute(
         {
             referencePoints: [coords.start, coords.finish],

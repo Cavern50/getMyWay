@@ -1,7 +1,7 @@
 import { onMounted, type Ref, ref } from 'vue';
-import { useRoute } from 'vue-router';
 import { MapsTypes } from '../lib/types';
 import { MAP_CONSTANTS } from '../lib/constants';
+import { getCurrentPosition, getQueryParameter } from '@/shared/lib/helpers';
 
 type UseYaMapInitProps = {
     mapContainer: Ref<HTMLDivElement | null>
@@ -13,20 +13,7 @@ type UseYaMapInitProps = {
 
 export const useYaMapInit = (props: UseYaMapInitProps) => {
     const { mapContainer, meetPoint, meetStep, map } = props
-    const route = useRoute()
     onMounted(async () => {
-        const meetParam = route.query.meet as string
-        if (meetParam) {
-            const coords = meetParam.split(',').map(Number)
-            const lat = coords[0]
-            const lon = coords[1]
-            if (lat !== undefined && lon !== undefined && !isNaN(lat) && !isNaN(lon)) {
-                meetPoint.value = [lon, lat] as MapsTypes.Coords;
-            }
-        }
-
-        if (!mapContainer.value) return
-
         const script = document.createElement('script')
         script.src = `https://api-maps.yandex.ru/2.1/?apikey=${MAP_CONSTANTS.API_KEY}&lang=ru_RU`;
         document.head.appendChild(script)
@@ -42,25 +29,30 @@ export const useYaMapInit = (props: UseYaMapInitProps) => {
                     }
                 })
 
-                map.value = new yaMaps.Map(mapContainer.value, {
-                    center: [59.9386, 30.3141],
-                    zoom: 10,
-                    controls: [inputSearch],
-                })
-
                 // Убрать mapStateAutoApply или убрать setCenter - не дублировать
                 const { geoObjects: { position } } = await yaMaps.geolocation.get({
                     provider: 'browser',
                     mapStateAutoApply: false  // Изменить на false
                 })
+                console.log({ position })
+                const userCoords = await getCurrentPosition();
+                console.log({ userCoords })
+                const controls = getQueryParameter('meet') ? [inputSearch] : [];
 
-                // Дождаться готовности карты перед setCenter
-                await new Promise<void>((resolve) => {
-                    map.value.events.once('idle', () => resolve())
-                    map.value.setCenter(position)
-                    // Если карта уже idle, разрешить сразу
-                    setTimeout(() => resolve(), 100)
+                map.value = new yaMaps.Map(mapContainer.value, {
+                    center: userCoords,
+                    zoom: 10,
+                    controls,
                 })
+
+
+                // // Дождаться готовности карты перед setCenter
+                // await new Promise<void>((resolve) => {
+                //     map.value.events.once('idle', () => resolve())
+                //     map.value.setCenter(position)
+                //     // Если карта уже idle, разрешить сразу
+                //     setTimeout(() => resolve(), 100)
+                // })
 
                 console.log(props)
 

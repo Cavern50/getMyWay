@@ -3,21 +3,24 @@ import { ref, watch, shallowRef } from 'vue'
 import { MAP_CONSTANTS } from '../lib/constants'
 import { MapsTypes } from '../lib/types'
 import { Alert } from '@/shared/ui'
+import { areCoordsValid, copyToBuffer, getQueryParameter } from '@/shared/lib/helpers'
 import { useMeetingSocket } from '../composables/useMeetingSocket'
-import { meetingApi, type Meeting } from '../api/meetingApi'
-import { loadMeetingFromUrl, addRoute } from '../lib/helpers'
+import { type Meeting } from '../api/meetingApi'
+import { setMeetingPlacemark, addRoute } from '../lib/helpers'
 import { useYaMapInit } from '../composables/useYaMapInit'
 import { useGeolocationWatch } from '../composables/useGeolocationWatch'
+import { useMeeting, useCreateMeeting } from '../model/useMapQuery'
+import type { AxiosError } from 'axios'
 
 const map = shallowRef<any>(null)
-
 const mapContainer = ref<HTMLDivElement | null>(null);
+
 const meetStep = ref<MapsTypes.uiStep>(MapsTypes.uiStep.FIND_MEET_POINT)
 const meetPoint = ref<MapsTypes.Coords | null>(null)
-const meetingLink = ref<string>('')
-const currentMeeting = ref<Meeting | null>(null)
+const meetingLink = ref<string>(getQueryParameter('meetLink'))
+
 const isCopiedAlertVisible = ref<boolean>(false)
-const isCreatingMeeting = ref<boolean>(false)
+
 const userRoute = shallowRef<any>(null);
 
 // WebSocket для отслеживания позиций
@@ -31,61 +34,76 @@ const {
     isConnected
 } = useMeetingSocket()
 
-// // Создание встречи
-async function createMeetingLink() {
-    if (!meetPoint.value) return
-
-    isCreatingMeeting.value = true
-    try {
-        const [lon, lat] = meetPoint.value
-
-        const meeting = await meetingApi.createMeeting({
-            title: 'Встреча',
-            location: {
-                coordinates: [lon, lat],
-            }
-        })
-
-        currentMeeting.value = meeting
-        meetingLink.value = `${window.location.origin}${window.location.pathname}?meetLink=${meeting.meetingLink}`
-
-        // Подключаемся к WebSocket и присоединяемся к встрече
-        connect()
-        joinMeeting(meeting.meetingLink)
-
-        // Начинаем отслеживание позиции
-        // startLocationTracking()
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(meetingLink.value).catch(() => { })
-        }
-
-        meetStep.value = MapsTypes.uiStep.COMPLETE
-    } catch (error) {
-        console.error('Error creating meeting:', error)
-        alert('Ошибка при создании встречи')
-    } finally {
-        isCreatingMeeting.value = false
-    }
-}
-
-
-function copyMeetingLink() {
-    if (!meetingLink.value) return
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(meetingLink.value)
-        isCopiedAlertVisible.value = true
-        setTimeout(() => {
-            isCopiedAlertVisible.value = false
-        }, 3000)
-    }
-}
 
 const { coords } = useGeolocationWatch({
     enableHighAccuracy: true,
     timeout: 1000,
 });
 
+const { data } = useMeeting(meetingLink.value);
+const createMeetingMutation = useCreateMeeting()
+// // Создание встречи
+const createMeetingLink = async () => {
+    if (!meetPoint.value) return
+
+    createMeetingMutation.mutate(
+        {
+            title: 'Встреча',
+            location: {
+                coordinates: meetPoint.value,
+            }
+        },
+        {
+            onSuccess: (meeting: Meeting) => {
+                meetingLink.value = `${window.location.origin}${window.location.pathname}?meetLink=${meeting.meetingLink}`
+
+                connect()
+                joinMeeting(meeting.meetingLink)
+
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(meetingLink.value)
+                }
+
+                meetStep.value = MapsTypes.uiStep.COMPLETE
+            },
+            onError: (error: AxiosError) => {
+                console.error('Error creating meeting:', error)
+                alert('Ошибка при создании встречи')
+            }
+        }
+    )
+}
+
+const copyMeetingLink = () => copyToBuffer(meetingLink.value, () => {
+    isCopiedAlertVisible.value = true
+    setTimeout(() => {
+        isCopiedAlertVisible.value = false
+    }, 3000)
+})
+
+watch([coords, meetPoint], ([newCoords, newMeetPoint]) => {
+    // Обновление маршрута при изменении координат
+    if (userRoute.value && areCoordsValid(newCoords) && newMeetPoint) {
+        userRoute.value?.model.setReferencePoints([newCoords, newMeetPoint])
+    }
+
+    // Создание нового маршрута при изменении точки встречи
+    if (newMeetPoint !== null && userRoute.value === null) {
+        const currentCoords = coords.value;
+        if (areCoordsValid(currentCoords)) {
+            const route = addRoute({
+                coords: { start: currentCoords, finish: newMeetPoint },
+                map
+            });
+            userRoute.value = route;
+        }
+    }
+
+    // Обновление метки при изменении точки встречи
+    if (newMeetPoint !== null && data.value) {
+        setMeetingPlacemark({ meeting: data.value, map })
+    }
+})
 
 useYaMapInit({
     mapContainer,
@@ -93,52 +111,18 @@ useYaMapInit({
     map,
     meetStep,
     onYaMapsReady: async () => {
-        const params = new URLSearchParams(window.location.search);
+        if (meetingLink.value && data.value) {
+            setMeetingPlacemark({ map, meeting: data.value });
 
-        const meetLink = params.get('meetLink');
-        if (meetLink) {
-            const meetData = await meetingApi.getMeetingByLink(meetLink);
-            loadMeetingFromUrl({
-                userCoords: coords.value,
-                map,
-                meeting: meetData
-            });
-            addRoute({ coords: { start: coords.value, finish: meetData.location.coordinates }, map })
+            const currentCoords = coords.value;
+            if (areCoordsValid(currentCoords)) {
+                const route = addRoute({ coords: { start: currentCoords, finish: data.value.location.coordinates }, map })
+                userRoute.value = route;
+            }
+            meetPoint.value = data.value.location.coordinates;
         }
-
     }
 });
-
-
-
-
-
-watch(coords, newCoords => {
-    if (userRoute.value) {
-        userRoute.value?.model.setReferencePoints([newCoords, meetPoint.value])
-    }
-});
-
-watch(meetPoint, (newMeetPoint) => {
-    // @ts-ignore
-    const yaMaps = window.ymaps as any
-
-    if (newMeetPoint) {
-        if (!userRoute.value) {
-            const route = addRoute({ coords: { start: coords.value, finish: newMeetPoint }, map });
-            userRoute.value = route;
-        }
-        var myGeoObjects = new yaMaps.GeoObjectCollection({}, {
-            preset: "islands#redCircleIcon",
-            strokeWidth: 4,
-            geodesic: true
-        });
-        // Добавление меток и полилинии в коллекцию.
-        myGeoObjects.add(new yaMaps.Placemark(newMeetPoint));
-        // Добавление коллекции на карту.
-        map.value.geoObjects.add(myGeoObjects);
-    }
-})
 
 </script>
 
@@ -153,7 +137,8 @@ watch(meetPoint, (newMeetPoint) => {
                     Участников: {{ participantLocations.length + 1 }}
                 </div>
             </div>
-            <ul class="ml-6 text-m font-medium list-decimal">
+            <div></div>
+            <ul v-if="!meetingLink" class="ml-6 text-m font-medium list-decimal">
                 <li v-for="item in MAP_CONSTANTS.LIST_ITEMS" :key="item.id"
                     :class="meetStep === item.step ? 'list-item' : 'list-item opacity-10'">
                     {{ item.name }}
@@ -161,9 +146,9 @@ watch(meetPoint, (newMeetPoint) => {
             </ul>
             <div v-if="meetStep === MapsTypes.uiStep.CREATE_MEETING_LINK">
                 <button type="button" class="btn btn-primary w-full" @click="createMeetingLink"
-                    :disabled="isCreatingMeeting">
-                    <span v-if="isCreatingMeeting" class="loading loading-spinner"></span>
-                    {{ isCreatingMeeting ? 'Создание...' : 'Создать встречу' }}
+                    :disabled="createMeetingMutation.isPending">
+                    <span v-if="createMeetingMutation.isPending" class="loading loading-spinner"></span>
+                    {{ createMeetingMutation.isPending ? 'Создание...' : 'Создать встречу' }}
                 </button>
             </div>
             <div v-if="meetStep === MapsTypes.uiStep.COMPLETE && meetingLink"
