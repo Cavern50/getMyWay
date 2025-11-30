@@ -9,19 +9,24 @@ import { type Meeting } from '../api/meetingApi'
 import { setMeetingPlacemark, addRoute } from '../lib/helpers'
 import { useYaMapInit } from '../composables/useYaMapInit'
 import { useGeolocationWatch } from '../composables/useGeolocationWatch'
-import { useMeeting, useCreateMeeting } from '../model/useMapQuery'
+import { useMeeting, useCreateMeeting, useJoinMeeting } from '../model/useMapQuery'
 import type { AxiosError } from 'axios'
+import { toRaw } from 'vue'
+import { useAuthStore } from '@/features/auth/model/useAuthStore'
 
 const map = shallowRef<any>(null)
 const mapContainer = ref<HTMLDivElement | null>(null);
 
 const meetStep = ref<MapsTypes.uiStep>(MapsTypes.uiStep.FIND_MEET_POINT)
-const meetPoint = ref<MapsTypes.Coords | null>(null)
+const meetPoint = ref<MapsTypes.MeetPoint | null>(null)
 const meetingLink = ref<string>(getQueryParameter('meetLink'))
+const yaRoutes = ref<Record<string, any>>({});
 
 const isCopiedAlertVisible = ref<boolean>(false)
 
 const userRoute = shallowRef<any>(null);
+
+const authStore = useAuthStore();
 
 // WebSocket для отслеживания позиций
 const {
@@ -41,16 +46,18 @@ const { coords } = useGeolocationWatch({
 });
 
 const { data } = useMeeting(meetingLink.value);
-const createMeetingMutation = useCreateMeeting()
+const createMeetingMutation = useCreateMeeting();
+const joinMeetingMutation = useJoinMeeting();
+
 // // Создание встречи
 const createMeetingLink = async () => {
-    if (!meetPoint.value) return
+    if (!meetPoint.value) return;
 
     createMeetingMutation.mutate(
         {
-            title: 'Встреча',
+            title: meetPoint.value.name,
             location: {
-                coordinates: meetPoint.value,
+                coordinates: meetPoint.value.coords,
             }
         },
         {
@@ -74,6 +81,9 @@ const createMeetingLink = async () => {
     )
 }
 
+const unk = {} as unknown;
+unk.toString()
+
 const copyMeetingLink = () => copyToBuffer(meetingLink.value, () => {
     isCopiedAlertVisible.value = true
     setTimeout(() => {
@@ -83,7 +93,9 @@ const copyMeetingLink = () => copyToBuffer(meetingLink.value, () => {
 
 watch([coords, meetPoint], ([newCoords, newMeetPoint]) => {
     // Обновление маршрута при изменении координат
-    if (userRoute.value && areCoordsValid(newCoords) && newMeetPoint) {
+    if (userRoute.value && areCoordsValid(newCoords) && newMeetPoint && data.value) {
+        console.log('WOW UPDATED')
+        updateLocation(data.value._id, newCoords);
         userRoute.value?.model.setReferencePoints([newCoords, newMeetPoint])
     }
 
@@ -92,7 +104,7 @@ watch([coords, meetPoint], ([newCoords, newMeetPoint]) => {
         const currentCoords = coords.value;
         if (areCoordsValid(currentCoords)) {
             const route = addRoute({
-                coords: { start: currentCoords, finish: newMeetPoint },
+                coords: { start: currentCoords, finish: newMeetPoint.coords },
                 map
             });
             userRoute.value = route;
@@ -105,6 +117,12 @@ watch([coords, meetPoint], ([newCoords, newMeetPoint]) => {
     }
 })
 
+watch(participantLocations, (newLocations) => {
+    newLocations.forEach((participant) => {
+        addRoute({ coords: { start: participant.coordinates, finish: data.value.location.coordinates }, map })
+    })
+})
+
 useYaMapInit({
     mapContainer,
     meetPoint,
@@ -112,8 +130,23 @@ useYaMapInit({
     meetStep,
     onYaMapsReady: async () => {
         if (meetingLink.value && data.value) {
+            const participantLocations = toRaw(data.value.participantLocations).filter((participant) => participant.userId !== authStore.userId);
+            participantLocations.forEach((participant) => {
+                addRoute({ coords: { start: participant.coordinates, finish: data.value.location.coordinates }, map })
+            })
             setMeetingPlacemark({ map, meeting: data.value });
-
+            connect();
+            joinMeeting(meetingLink.value);
+            joinMeetingMutation.mutate(
+                meetingLink.value,
+                {
+                    onSuccess: (meeting: Meeting) => { },
+                    onError: (error: AxiosError) => {
+                        console.error('Error creating meeting:', error)
+                        alert('Ошибка при создании встречи')
+                    }
+                }
+            )
             const currentCoords = coords.value;
             if (areCoordsValid(currentCoords)) {
                 const route = addRoute({ coords: { start: currentCoords, finish: data.value.location.coordinates }, map })

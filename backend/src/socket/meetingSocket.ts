@@ -60,7 +60,7 @@ export function setupMeetingSocket(io: Server) {
         socket.on('update-location', async (data: { coordinates: [number, number] }) => {
             try {
                 const { coordinates } = data;
-
+                console.log(coordinates, 'UPDATE LOCATION WAS TRIED')
                 if (!socket.userId || !socket.meetingId) {
                     socket.emit('error', { message: 'User not authenticated or not in meeting' });
                     return;
@@ -80,6 +80,7 @@ export function setupMeetingSocket(io: Server) {
                     participantLocations: meeting.participantLocations
                 });
             } catch (error: any) {
+                console.log('UPDATE LOCATION WAS TRIED')
                 socket.emit('error', { message: error.message });
             }
         });

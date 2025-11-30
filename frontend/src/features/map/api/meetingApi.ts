@@ -69,8 +69,8 @@ export const meetingApi = {
         return response.data;
     },
 
-    joinMeeting: async (meetingId: string) => {
-        const response = await api.post<Meeting>('/join', { meetingId });
+    joinMeeting: async (meetingLink: string) => {
+        const response = await api.post<Meeting>('/join', { meetingLink });
         return response.data;
     },
 

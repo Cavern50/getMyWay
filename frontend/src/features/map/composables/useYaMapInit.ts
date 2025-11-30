@@ -5,7 +5,7 @@ import { getCurrentPosition, getQueryParameter } from '@/shared/lib/helpers';
 
 type UseYaMapInitProps = {
     mapContainer: Ref<HTMLDivElement | null>
-    meetPoint: Ref<[number, number] | null>
+    meetPoint: Ref<MapsTypes.MeetPoint | null>
     map: Ref<any>
     meetStep: Ref<MapsTypes.uiStep>
     onYaMapsReady: () => Promise<any>
@@ -29,32 +29,16 @@ export const useYaMapInit = (props: UseYaMapInitProps) => {
                     }
                 })
 
-                // Убрать mapStateAutoApply или убрать setCenter - не дублировать
-                const { geoObjects: { position } } = await yaMaps.geolocation.get({
-                    provider: 'browser',
-                    mapStateAutoApply: false  // Изменить на false
-                })
-                console.log({ position })
+
                 const userCoords = await getCurrentPosition();
-                console.log({ userCoords })
-                const controls = getQueryParameter('meet') ? [inputSearch] : [];
+                const controls = getQueryParameter('meetLink') ? [] : [inputSearch];
+
 
                 map.value = new yaMaps.Map(mapContainer.value, {
                     center: userCoords,
                     zoom: 10,
                     controls,
                 })
-
-
-                // // Дождаться готовности карты перед setCenter
-                // await new Promise<void>((resolve) => {
-                //     map.value.events.once('idle', () => resolve())
-                //     map.value.setCenter(position)
-                //     // Если карта уже idle, разрешить сразу
-                //     setTimeout(() => resolve(), 100)
-                // })
-
-                console.log(props)
 
                 props.onYaMapsReady();
 
@@ -63,9 +47,11 @@ export const useYaMapInit = (props: UseYaMapInitProps) => {
                     const index = e.get('index')
                     inputSearch.getResult(index).then(async (res: any) => {
                         const coords = res.geometry.getCoordinates()
-                        meetPoint.value = coords as MapsTypes.Coords
+                        meetPoint.value = {
+                            coords: coords as MapsTypes.Coords,
+                            name: res.properties._data.name
+                        }
                         meetStep.value = MapsTypes.uiStep.CREATE_MEETING_LINK;
-
                         try {
                             map.value.controls.remove(inputSearch)
                         } catch (e) {

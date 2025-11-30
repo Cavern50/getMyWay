@@ -63,6 +63,7 @@ export class MeetingService {
         userId: string,
         coordinates: [number, number]
     ) {
+        console.log('INSIDE')
         const meeting = await Meeting.findById(meetingId);
         if (!meeting) throw new Error('Meeting not found');
 

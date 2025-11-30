@@ -59,18 +59,15 @@ export function useMeetingSocket() {
         });
 
         socket.value.on('meeting-joined', (data: { meeting: Meeting; participantLocations: ParticipantLocation['participantLocations'] }) => {
-            console.log('Meeting joined:', data);
             currentMeeting.value = data.meeting;
             participantLocations.value = data.participantLocations;
         });
 
         socket.value.on('participant-joined', (data: { userId: string; meeting: Meeting }) => {
-            console.log('Participant joined:', data);
             currentMeeting.value = data.meeting;
         });
 
         socket.value.on('participant-location-updated', (data: ParticipantLocation) => {
-            console.log('Participant location updated:', data);
             participantLocations.value = data.participantLocations;
         });
 
@@ -106,7 +103,30 @@ export function useMeetingSocket() {
     }
 
     function updateLocation(_meetingId: string, coordinates: [number, number]) {
-        if (socket.value?.connected && currentMeeting.value) {
+        // Если сокет не подключен, пытаемся подключиться
+        if (!socket.value || !socket.value.connected) {
+            // Если сокета нет, создаем его
+            if (!socket.value) {
+                connect();
+            }
+
+            // После connect() socket.value должен быть установлен
+            // Подписываемся на событие подключения, если еще не подключен
+            if (socket.value && !socket.value.connected) {
+                socket.value.once('connect', () => {
+                    if (currentMeeting.value) {
+                        socket.value?.emit('update-location', { coordinates });
+                    }
+                });
+            } else if (socket.value?.connected && currentMeeting.value) {
+                // Если уже подключен после connect(), отправляем сразу
+                socket.value.emit('update-location', { coordinates });
+            }
+            return;
+        }
+
+        // Если сокет подключен и есть текущая встреча, отправляем обновление
+        if (currentMeeting.value) {
             socket.value.emit('update-location', { coordinates });
         }
     }

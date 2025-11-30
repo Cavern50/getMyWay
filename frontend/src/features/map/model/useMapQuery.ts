@@ -22,3 +22,13 @@ export const useCreateMeeting = () => {
         },
     });
 };
+
+export const useJoinMeeting = () => {
+    const queryClient = useQueryClient();
+    return useMutation<Meeting, Error, Parameters<typeof meetingApi.joinMeeting>[0]>({
+        mutationFn: meetingApi.joinMeeting,
+        onSuccess: (data) => {
+            queryClient.invalidateQueries(['meeting', data._id]);
+        },
+    });
+}

@@ -66,6 +66,7 @@ export const joinMeeting = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ message: 'meetingId or meetingLink required' });
         }
     } catch (error: any) {
+        console.log(error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };

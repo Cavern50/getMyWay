@@ -6,4 +6,8 @@ export namespace MapsTypes {
         COMPLETE = 'COMPLETE',
     }
     export type Coords = [number, number]
+    export type MeetPoint = {
+        coords: Coords
+        name: string
+    }
 }

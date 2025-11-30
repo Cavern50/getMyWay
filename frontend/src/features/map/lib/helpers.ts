@@ -139,7 +139,7 @@ export const joinMeetingByLink = async ({ link, currentMeeting, meetPoint, map }
     }
 }
 
-export const addRoute = ({ coords, map }: { coords: { start: [number, number], finish: [number, number] }, map: any }) => {
+export const addRoute = ({ coords, map, yaRoutes }: { coords: { start: MapsTypes.Coords, finish: MapsTypes.Coords }, map: any, yaRoutes: Record<string, any> }) => {
     if (!map.value) return
     //@ts-ignore
     const { multiRouter } = window.ymaps
@@ -153,7 +153,7 @@ export const addRoute = ({ coords, map }: { coords: { start: [number, number], f
             wayPointFinishVisible: false,
         },
     );
-
+    yaRoutes
     map.value.geoObjects.add(route)
     return route;
 }
